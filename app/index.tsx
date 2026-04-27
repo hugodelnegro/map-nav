@@ -1,45 +1,55 @@
-import React, { useState } from 'react';
-import { Pressable, Text, useWindowDimensions } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-// NO curly braces for default export
-import InteractiveMap from './InteractiveMap'; 
-import MapImage from '../assets/images/map.png';
+import InteractiveMap from './InteractiveMap';
+import MapGrid from './MapGrid';
 
 const MAP_IMAGE_WIDTH = 1254;
 const MAP_IMAGE_HEIGHT = 1254;
 
 export default function MapScreen() {
   const { width, height } = useWindowDimensions();
-  const mapWidth = MAP_IMAGE_WIDTH;
-  const mapHeight = MAP_IMAGE_HEIGHT;
   const [showGrid, setShowGrid] = useState(false);
 
   return (
     <SafeAreaProvider>
-      <GestureHandlerRootView className="flex-1 bg-black">
+      <View style={{ flex: 1, backgroundColor: 'black' }}>
         <StatusBar hidden />
+
         <InteractiveMap
-          source={MapImage}
-          gridSize={60}
-          mapWidth={mapWidth}
-          mapHeight={mapHeight}
+          source={require('../assets/images/map.png')}
+          mapWidth={MAP_IMAGE_WIDTH}
+          mapHeight={MAP_IMAGE_HEIGHT}
           viewportWidth={width}
           viewportHeight={height}
-          showGrid={showGrid}
-        />
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setShowGrid((current) => !current)}
-          className="absolute right-4 top-16 rounded-full border border-white/20 bg-black/70 px-4 py-2"
         >
-          <Text className="text-xs font-mono uppercase tracking-widest text-white">
-            Grid {showGrid ? 'On' : 'Off'}
+          <MapGrid
+            showGrid={showGrid}
+            gridSize={60}
+            mapWidth={MAP_IMAGE_WIDTH}
+            mapHeight={MAP_IMAGE_HEIGHT}
+          />
+        </InteractiveMap>
+
+        <Pressable
+          onPress={() => setShowGrid((prev) => !prev)}
+          style={{
+            position: 'absolute',
+            right: 20,
+            top: 60,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            padding: 12,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#00FF00',
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>
+            GRID: {showGrid ? 'ON' : 'OFF'}
           </Text>
         </Pressable>
-      </GestureHandlerRootView>
+      </View>
     </SafeAreaProvider>
   );
 }

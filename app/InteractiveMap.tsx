@@ -1,206 +1,180 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import React from 'react';
+import { Image, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { 
-  useAnimatedStyle, 
-  withTiming, 
-  withSequence,
-  withSpring,
+import Animated, {
+  useAnimatedStyle,
   useSharedValue,
-  runOnJS
 } from 'react-native-reanimated';
 
 interface MapProps {
   source: any;
-  gridSize?: number;
   mapWidth: number;
   mapHeight: number;
   viewportWidth: number;
   viewportHeight: number;
-  showGrid?: boolean;
-}
-
-const MAX_SCALE = 4;
-
-function clamp(value: number, min: number, max: number) {
-  'worklet';
-  return Math.min(Math.max(value, min), max);
+  children?: React.ReactNode;
 }
 
 const InteractiveMap = ({
   source,
-  gridSize = 12,
   mapWidth,
   mapHeight,
   viewportWidth,
   viewportHeight,
-  showGrid = true,
+  children,
 }: MapProps) => {
-  const minScale = Math.max(viewportWidth / mapWidth, viewportHeight / mapHeight);
-  const initialScale = Math.max(1.8, minScale);
-  const initialTranslateX = 0;
-  const initialTranslateY = viewportHeight - mapHeight * initialScale;
-  const [selectedCell, setSelectedCell] = useState<{ col: string; row: number } | null>(null);
-  const scale = useSharedValue(initialScale);
-  const savedScale = useSharedValue(initialScale);
-  const translateX = useSharedValue(initialTranslateX);
-  const translateY = useSharedValue(initialTranslateY);
-  const savedTranslationX = useSharedValue(initialTranslateX);
-  const savedTranslationY = useSharedValue(initialTranslateY);
-  const selectionOpacity = useSharedValue(0);
-  const selectionScale = useSharedValue(0.8);
-  const selectionX = useSharedValue(0);
-  const selectionY = useSharedValue(0);
+  const zoomMultiplier = 2;
 
-  const cellWidth = mapWidth / gridSize;
-  const cellHeight = mapHeight / gridSize;
+  const baseScale = viewportHeight / mapHeight;
+  const initialScale = baseScale * zoomMultiplier;
+  const minScale = baseScale;
+  const maxScale = baseScale * 4;
 
-  const updateSelectedCell = (col: string, row: number) => {
-    setSelectedCell({ col, row });
+  // All values the worklet needs must be captured as plain numbers (not shared values)
+  // so they are inlined into the worklet closure at creation time.
+  const _mapWidth = mapWidth;
+  const _mapHeight = mapHeight;
+  const _viewportWidth = viewportWidth;
+  const _viewportHeight = viewportHeight;
+
+  /**
+   * Returns pan bounds for a given scale.
+   * MUST be a worklet — it is called from gesture handlers on the UI thread.
+   *
+   * The map is transformed with:
+   *   translateX / translateY  (applied in map-space, before scale in the transform array)
+   *   scale
+   *
+   * Because we apply translate BEFORE scale in the transform array, the translation
+   * values are in *map coordinates*, not screen coordinates. The clamping below keeps
+   * the scaled map inside the viewport.
+   */
+  const getBounds = (currentScale: number) => {
+    'worklet';
+    const scaledWidth = _mapWidth * currentScale;
+    const scaledHeight = _mapHeight * currentScale;
+
+    // How far the map can move horizontally so it never leaves the viewport
+    const overflowX = Math.max(scaledWidth - _viewportWidth, 0);
+    const overflowY = Math.max(scaledHeight - _viewportHeight, 0);
+
+    // In pre-scale translate space the displacement that corresponds to
+    // one screen pixel is (1 / currentScale) map pixels.
+    const halfOverflowX = overflowX / 2 / currentScale;
+    const halfOverflowY = overflowY / 2 / currentScale;
+
+    return {
+      minX: -halfOverflowX,
+      maxX: halfOverflowX,
+      minY: -halfOverflowY,
+      maxY: halfOverflowY,
+    };
   };
 
-  const tapGesture = Gesture.Tap()
-    .maxDuration(250)
-    .maxDistance(12)
-    .onEnd((e, success) => {
-    if (!success) {
-      return;
-    }
+  const clamp = (value: number, min: number, max: number) => {
+    'worklet';
+    return Math.min(Math.max(value, min), max);
+  };
 
-    const imageX = (e.x - translateX.value) / scale.value;
-    const imageY = (e.y - translateY.value) / scale.value;
-    const colIdx = Math.floor((imageX / mapWidth) * gridSize);
-    const rowIdx = Math.floor((imageY / mapHeight) * gridSize);
-    
-    if (colIdx >= 0 && colIdx < gridSize && rowIdx >= 0 && rowIdx < gridSize) {
-      selectionX.value = colIdx * cellWidth;
-      selectionY.value = rowIdx * cellHeight;
-      selectionOpacity.value = withTiming(1, { duration: 100 });
-      selectionScale.value = withSequence(withSpring(1.2), withSpring(1));
-      runOnJS(updateSelectedCell)(String.fromCharCode(65 + colIdx), rowIdx + 1);
-    }
-  });
+  // Shared values — all in *map-space* (pre-scale) coordinates
+  const scale = useSharedValue(initialScale);
+  const savedScale = useSharedValue(initialScale);
+
+  // Start at left-bottom: pan as far left and as far down as bounds allow
+  const initialBounds = (() => {
+    const scaledWidth = mapWidth * initialScale;
+    const scaledHeight = mapHeight * initialScale;
+    const overflowX = Math.max(scaledWidth - viewportWidth, 0);
+    const overflowY = Math.max(scaledHeight - viewportHeight, 0);
+    const halfOverflowX = overflowX / 2 / initialScale;
+    const halfOverflowY = overflowY / 2 / initialScale;
+    return { minX: -halfOverflowX, maxX: halfOverflowX, minY: -halfOverflowY, maxY: halfOverflowY };
+  })();
+
+  const translationX = useSharedValue(initialBounds.maxX); // left edge
+  const translationY = useSharedValue(initialBounds.minY); // bottom edge
+  const savedTranslationX = useSharedValue(initialBounds.maxX);
+  const savedTranslationY = useSharedValue(initialBounds.minY);
+
+  const panGesture = Gesture.Pan()
+    .averageTouches(true)
+    .onUpdate((e) => {
+      'worklet';
+      const bounds = getBounds(scale.value);
+      // e.translationX/Y are in screen pixels; convert to map-space
+      translationX.value = clamp(
+        savedTranslationX.value + e.translationX / scale.value,
+        bounds.minX,
+        bounds.maxX,
+      );
+      translationY.value = clamp(
+        savedTranslationY.value + e.translationY / scale.value,
+        bounds.minY,
+        bounds.maxY,
+      );
+    })
+    .onEnd(() => {
+      'worklet';
+      savedTranslationX.value = translationX.value;
+      savedTranslationY.value = translationY.value;
+    });
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      const nextScale = clamp(savedScale.value * e.scale, minScale, MAX_SCALE);
-      const minTranslateX = viewportWidth - mapWidth * nextScale;
-      const minTranslateY = viewportHeight - mapHeight * nextScale;
+      'worklet';
+      const nextScale = clamp(savedScale.value * e.scale, minScale, maxScale);
+      const bounds = getBounds(nextScale);
 
       scale.value = nextScale;
-      translateX.value = clamp(savedTranslationX.value, minTranslateX, 0);
-      translateY.value = clamp(savedTranslationY.value, minTranslateY, 0);
+      translationX.value = clamp(translationX.value, bounds.minX, bounds.maxX);
+      translationY.value = clamp(translationY.value, bounds.minY, bounds.maxY);
     })
     .onEnd(() => {
+      'worklet';
       savedScale.value = scale.value;
-      savedTranslationX.value = translateX.value;
-      savedTranslationY.value = translateY.value;
+      savedTranslationX.value = translationX.value;
+      savedTranslationY.value = translationY.value;
     });
 
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      const minTranslateX = viewportWidth - mapWidth * scale.value;
-      const minTranslateY = viewportHeight - mapHeight * scale.value;
-
-      translateX.value = clamp(savedTranslationX.value + e.translationX, minTranslateX, 0);
-      translateY.value = clamp(savedTranslationY.value + e.translationY, minTranslateY, 0);
-    })
-    .onEnd(() => {
-      savedTranslationX.value = translateX.value;
-      savedTranslationY.value = translateY.value;
-    });
-
-  const animatedSelectionStyle = useAnimatedStyle(() => ({
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: _mapWidth,
+    height: _mapHeight,
     transform: [
-      { translateX: selectionX.value },
-      { translateY: selectionY.value },
-      { scale: selectionScale.value }
-    ],
-    opacity: selectionOpacity.value,
-  }));
-
-  const translateStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
-
-  const scaleStyle = useAnimatedStyle(() => ({
-    transform: [
+      // Centre the map in the viewport first, then apply user pan, then scale.
+      // Keeping translateX/Y in map-space (pre-scale) means the math above is simpler.
+      { translateX: (_viewportWidth - _mapWidth) / 2 + translationX.value * scale.value },
+      { translateY: (_viewportHeight - _mapHeight) / 2 + translationY.value * scale.value },
       { scale: scale.value },
     ],
   }));
 
-  const cells = Array.from({ length: gridSize });
-  const navigationGesture = Gesture.Simultaneous(panGesture, pinchGesture);
-  const mapGesture = Gesture.Race(navigationGesture, tapGesture);
-
   return (
-    <View className="flex-1 overflow-hidden">
-      <GestureDetector gesture={mapGesture}>
-        <Animated.View style={[{ width: mapWidth, height: mapHeight }, translateStyle]}>
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFillObject,
-              {
-                transformOrigin: 'top left',
-              },
-              scaleStyle,
-            ]}
-          >
-            <Image source={source} style={StyleSheet.absoluteFill} resizeMode="stretch" />
-
-            {showGrid && (
-              <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                {cells.map((_, i) => (
-                  <React.Fragment key={i}>
-                    <View className="absolute h-full border-r border-white/20" style={{ left: `${(i / gridSize) * 100}%`, width: 1 }} />
-                    <View className="absolute w-full border-b border-white/20" style={{ top: `${(i / gridSize) * 100}%`, height: 1 }} />
-                  </React.Fragment>
-                ))}
-                {cells.map((_, i) => (
-                  <React.Fragment key={`label-${i}`}>
-                    <Text className="absolute text-[10px] text-white/50 font-mono" style={{ left: `${(i / gridSize) * 100}%`, top: 4, marginLeft: 4 }}>
-                      {String.fromCharCode(65 + i)}
-                    </Text>
-                    <Text className="absolute text-[10px] text-white/50 font-mono" style={{ top: `${(i / gridSize) * 100}%`, left: 4, marginTop: 4 }}>
-                      {i + 1}
-                    </Text>
-                  </React.Fragment>
-                ))}
-              </View>
-            )}
-
-            <Animated.View
-              style={[
-                {
-                  position: 'absolute',
-                  width: cellWidth,
-                  height: cellHeight,
-                  borderWidth: 3,
-                  borderColor: '#22c55e',
-                  backgroundColor: 'rgba(34, 197, 94, 0.25)',
-                  zIndex: 20,
-                },
-                animatedSelectionStyle,
-              ]}
-            />
-          </Animated.View>
+    <View
+      style={[
+        styles.container,
+        { width: viewportWidth, height: viewportHeight },
+      ]}
+    >
+      <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
+        <Animated.View style={animatedStyle}>
+          <Image
+            source={source}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+          {children}
         </Animated.View>
       </GestureDetector>
-      {selectedCell && (
-        <View
-          className="absolute bottom-6 rounded-full bg-black/75 px-4 py-2"
-          style={{ left: '50%', transform: [{ translateX: -40 }] }}
-        >
-          <Text className="text-sm font-mono text-white">
-            {selectedCell.col}-{selectedCell.row}
-          </Text>
-        </View>
-      )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+});
 
 export default InteractiveMap;
