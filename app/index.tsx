@@ -1,12 +1,20 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import markers from '../data/makers';
 import InteractiveMap from './InteractiveMap';
 import MapGrid from './MapGrid';
+import MapMarker, { GridConfig } from './MapMarker';
 
 const MAP_IMAGE_WIDTH = 1254;
 const MAP_IMAGE_HEIGHT = 1254;
+
+export const GRID_CONFIG: GridConfig = {
+  gridSize: 60,
+  mapWidth: MAP_IMAGE_WIDTH,
+  mapHeight: MAP_IMAGE_HEIGHT,
+};
 
 export default function MapScreen() {
   const { width, height } = useWindowDimensions();
@@ -26,10 +34,20 @@ export default function MapScreen() {
         >
           <MapGrid
             showGrid={showGrid}
-            gridSize={60}
+            gridSize={GRID_CONFIG.gridSize}
             mapWidth={MAP_IMAGE_WIDTH}
             mapHeight={MAP_IMAGE_HEIGHT}
           />
+
+          {markers.map((marker) => (
+            <MapMarker
+              key={marker.id}
+              cell={marker.cell}
+              source={marker.source}
+              config={GRID_CONFIG}
+              scale={marker.scale}
+            />
+          ))}
         </InteractiveMap>
 
         <Pressable

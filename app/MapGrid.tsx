@@ -15,6 +15,13 @@ interface GridProps {
   mapHeight: number;
 }
 
+const toColLabel = (colIdx: number): string => {
+  if (colIdx < 26) return String.fromCharCode(65 + colIdx);
+  const first = String.fromCharCode(65 + Math.floor(colIdx / 26) - 1);
+  const second = String.fromCharCode(65 + (colIdx % 26));
+  return first + second;
+};
+
 const MapGrid = ({ showGrid, gridSize, mapWidth, mapHeight }: GridProps) => {
   const [selectedCell, setSelectedCell] = useState<{ col: string; row: number } | null>(null);
   const selectionX = useSharedValue(0);
@@ -24,24 +31,25 @@ const MapGrid = ({ showGrid, gridSize, mapWidth, mapHeight }: GridProps) => {
   const cellWidth = mapWidth / gridSize;
   const cellHeight = mapHeight / gridSize;
 
+  const handleCellSelected = (colIdx: number, rowIdx: number) => {
+    setSelectedCell({
+      col: toColLabel(colIdx),
+      row: gridSize - rowIdx,
+    });
+  };
+
   const tap = Gesture.Tap()
     .maxDuration(250)
     .onEnd((e) => {
       'worklet';
       if (!showGrid) return;
-
       const colIdx = Math.floor(e.x / cellWidth);
       const rowIdx = Math.floor(e.y / cellHeight);
-
       if (colIdx >= 0 && colIdx < gridSize && rowIdx >= 0 && rowIdx < gridSize) {
         selectionX.value = colIdx * cellWidth;
         selectionY.value = rowIdx * cellHeight;
         selectionOpacity.value = withTiming(1);
-
-        runOnJS(setSelectedCell)({
-          col: String.fromCharCode(65 + colIdx),
-          row: gridSize - rowIdx,
-        });
+        runOnJS(handleCellSelected)(colIdx, rowIdx);
       }
     });
 
@@ -58,63 +66,22 @@ const MapGrid = ({ showGrid, gridSize, mapWidth, mapHeight }: GridProps) => {
 
   if (!showGrid) return null;
 
-  // Build vertical lines (columns) and horizontal lines (rows)
   const verticalLines = Array.from({ length: gridSize - 1 }, (_, i) => (
-    <View
-      key={`v-${i}`}
-      style={{
-        position: 'absolute',
-        left: cellWidth * (i + 1),
-        top: 0,
-        width: 1,
-        height: mapHeight,
-        backgroundColor: 'rgba(0, 255, 0, 0.4)',
-      }}
-    />
+    <View key={`v-${i}`} style={{ position: 'absolute', left: cellWidth * (i + 1), top: 0, width: 1, height: mapHeight, backgroundColor: 'rgba(0, 255, 0, 0.4)' }} />
   ));
 
   const horizontalLines = Array.from({ length: gridSize - 1 }, (_, i) => (
-    <View
-      key={`h-${i}`}
-      style={{
-        position: 'absolute',
-        top: cellHeight * (i + 1),
-        left: 0,
-        height: 1,
-        width: mapWidth,
-        backgroundColor: 'rgba(0, 255, 0, 0.4)',
-      }}
-    />
+    <View key={`h-${i}`} style={{ position: 'absolute', top: cellHeight * (i + 1), left: 0, height: 1, width: mapWidth, backgroundColor: 'rgba(0, 255, 0, 0.4)' }} />
   ));
 
-  // Column labels (A, B, C…) along the top
   const colLabels = Array.from({ length: gridSize }, (_, i) => (
-    <View
-      key={`col-label-${i}`}
-      style={{
-        position: 'absolute',
-        left: cellWidth * i,
-        top: 4,
-        width: cellWidth,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={styles.gridLabel}>{String.fromCharCode(65 + i)}</Text>
+    <View key={`col-${i}`} style={{ position: 'absolute', left: cellWidth * i, top: 4, width: cellWidth, alignItems: 'center' }}>
+      <Text style={styles.gridLabel}>{toColLabel(i)}</Text>
     </View>
   ));
 
-  // Row labels (12, 11, 10… 1) along the left
   const rowLabels = Array.from({ length: gridSize }, (_, i) => (
-    <View
-      key={`row-label-${i}`}
-      style={{
-        position: 'absolute',
-        top: cellHeight * i,
-        left: 4,
-        height: cellHeight,
-        justifyContent: 'center',
-      }}
-    >
+    <View key={`row-${i}`} style={{ position: 'absolute', top: cellHeight * i, left: 4, height: cellHeight, justifyContent: 'center' }}>
       <Text style={styles.gridLabel}>{gridSize - i}</Text>
     </View>
   ));
@@ -127,12 +94,9 @@ const MapGrid = ({ showGrid, gridSize, mapWidth, mapHeight }: GridProps) => {
         {colLabels}
         {rowLabels}
         <Animated.View style={animatedSelection} />
-
         {selectedCell && (
           <View style={styles.labelContainer}>
-            <Text style={styles.labelText}>
-              {selectedCell.col}{selectedCell.row}
-            </Text>
+            <Text style={styles.labelText}>{selectedCell.col}{selectedCell.row}</Text>
           </View>
         )}
       </View>
@@ -152,11 +116,7 @@ const styles = StyleSheet.create({
     borderColor: '#00FF00',
   },
   labelText: { color: '#00FF00', fontSize: 18, fontWeight: 'bold' },
-  gridLabel: {
-    color: 'rgba(0, 255, 0, 0.8)',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+  gridLabel: { color: 'rgba(0, 255, 0, 0.8)', fontSize: 10, fontWeight: 'bold' },
 });
 
 export default MapGrid;

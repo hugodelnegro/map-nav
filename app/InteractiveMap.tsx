@@ -30,39 +30,19 @@ const InteractiveMap = ({
   const minScale = baseScale;
   const maxScale = baseScale * 4;
 
-  // All values the worklet needs must be captured as plain numbers (not shared values)
-  // so they are inlined into the worklet closure at creation time.
   const _mapWidth = mapWidth;
   const _mapHeight = mapHeight;
   const _viewportWidth = viewportWidth;
   const _viewportHeight = viewportHeight;
 
-  /**
-   * Returns pan bounds for a given scale.
-   * MUST be a worklet — it is called from gesture handlers on the UI thread.
-   *
-   * The map is transformed with:
-   *   translateX / translateY  (applied in map-space, before scale in the transform array)
-   *   scale
-   *
-   * Because we apply translate BEFORE scale in the transform array, the translation
-   * values are in *map coordinates*, not screen coordinates. The clamping below keeps
-   * the scaled map inside the viewport.
-   */
   const getBounds = (currentScale: number) => {
     'worklet';
     const scaledWidth = _mapWidth * currentScale;
     const scaledHeight = _mapHeight * currentScale;
-
-    // How far the map can move horizontally so it never leaves the viewport
     const overflowX = Math.max(scaledWidth - _viewportWidth, 0);
     const overflowY = Math.max(scaledHeight - _viewportHeight, 0);
-
-    // In pre-scale translate space the displacement that corresponds to
-    // one screen pixel is (1 / currentScale) map pixels.
     const halfOverflowX = overflowX / 2 / currentScale;
     const halfOverflowY = overflowY / 2 / currentScale;
-
     return {
       minX: -halfOverflowX,
       maxX: halfOverflowX,
@@ -76,11 +56,6 @@ const InteractiveMap = ({
     return Math.min(Math.max(value, min), max);
   };
 
-  // Shared values — all in *map-space* (pre-scale) coordinates
-  const scale = useSharedValue(initialScale);
-  const savedScale = useSharedValue(initialScale);
-
-  // Start at left-bottom: pan as far left and as far down as bounds allow
   const initialBounds = (() => {
     const scaledWidth = mapWidth * initialScale;
     const scaledHeight = mapHeight * initialScale;
@@ -91,8 +66,10 @@ const InteractiveMap = ({
     return { minX: -halfOverflowX, maxX: halfOverflowX, minY: -halfOverflowY, maxY: halfOverflowY };
   })();
 
-  const translationX = useSharedValue(initialBounds.maxX); // left edge
-  const translationY = useSharedValue(initialBounds.minY); // bottom edge
+  const scale = useSharedValue(initialScale);
+  const savedScale = useSharedValue(initialScale);
+  const translationX = useSharedValue(initialBounds.maxX);
+  const translationY = useSharedValue(initialBounds.minY);
   const savedTranslationX = useSharedValue(initialBounds.maxX);
   const savedTranslationY = useSharedValue(initialBounds.minY);
 
@@ -101,7 +78,6 @@ const InteractiveMap = ({
     .onUpdate((e) => {
       'worklet';
       const bounds = getBounds(scale.value);
-      // e.translationX/Y are in screen pixels; convert to map-space
       translationX.value = clamp(
         savedTranslationX.value + e.translationX / scale.value,
         bounds.minX,
@@ -124,7 +100,6 @@ const InteractiveMap = ({
       'worklet';
       const nextScale = clamp(savedScale.value * e.scale, minScale, maxScale);
       const bounds = getBounds(nextScale);
-
       scale.value = nextScale;
       translationX.value = clamp(translationX.value, bounds.minX, bounds.maxX);
       translationY.value = clamp(translationY.value, bounds.minY, bounds.maxY);
@@ -140,8 +115,6 @@ const InteractiveMap = ({
     width: _mapWidth,
     height: _mapHeight,
     transform: [
-      // Centre the map in the viewport first, then apply user pan, then scale.
-      // Keeping translateX/Y in map-space (pre-scale) means the math above is simpler.
       { translateX: (_viewportWidth - _mapWidth) / 2 + translationX.value * scale.value },
       { translateY: (_viewportHeight - _mapHeight) / 2 + translationY.value * scale.value },
       { scale: scale.value },
@@ -149,12 +122,7 @@ const InteractiveMap = ({
   }));
 
   return (
-    <View
-      style={[
-        styles.container,
-        { width: viewportWidth, height: viewportHeight },
-      ]}
-    >
+    <View style={[styles.container, { width: viewportWidth, height: viewportHeight }]}>
       <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
         <Animated.View style={animatedStyle}>
           <Image
@@ -162,7 +130,10 @@ const InteractiveMap = ({
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
           />
-          {children}
+          {/* Single View wrapper fixes the "got: array" crash when multiple children are passed */}
+          <View style={StyleSheet.absoluteFill}>
+            {children}
+          </View>
         </Animated.View>
       </GestureDetector>
     </View>
