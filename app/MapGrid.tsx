@@ -32,10 +32,7 @@ const MapGrid = ({ showGrid, gridSize, mapWidth, mapHeight }: GridProps) => {
   const cellHeight = mapHeight / gridSize;
 
   const handleCellSelected = (colIdx: number, rowIdx: number) => {
-    setSelectedCell({
-      col: toColLabel(colIdx),
-      row: gridSize - rowIdx,
-    });
+    setSelectedCell({ col: toColLabel(colIdx), row: gridSize - rowIdx });
   };
 
   const tap = Gesture.Tap()

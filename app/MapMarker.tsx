@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ImageSourcePropType, View } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, View } from 'react-native';
 
 export interface GridConfig {
   gridSize: number;
@@ -27,7 +27,7 @@ const cellToPixelRect = (cell: CellCoord, config: GridConfig) => {
   const cellWidth = config.mapWidth / config.gridSize;
   const cellHeight = config.mapHeight / config.gridSize;
   const colIdx = colLabelToIndex(cell.col);
-  const rowIdx = config.gridSize - cell.row; // invert: row 1 = bottom
+  const rowIdx = config.gridSize - cell.row;
   const x = colIdx * cellWidth;
   const y = rowIdx * cellHeight;
   return {
@@ -44,18 +44,20 @@ interface MapMarkerProps {
   cell: CellCoord;
   source: ImageSourcePropType;
   config: GridConfig;
-  /** Fraction of cell size to render the image. Default 0.8 */
+  /** Fraction of cell size to render the image. Default 2 */
   scale?: number;
+  onPress?: () => void;
 }
 
-const MapMarker = ({ cell, source, config, scale = 2 }: MapMarkerProps) => {
+const MapMarker = ({ cell, source, config, scale = 2, onPress }: MapMarkerProps) => {
   const rect = cellToPixelRect(cell, config);
   const imageSize = Math.min(rect.width, rect.height) * scale;
   const offsetX = rect.centerX - imageSize / 2;
   const offsetY = rect.centerY - imageSize / 2;
 
   return (
-    <View
+    <Pressable
+      onPress={onPress}
       style={{
         position: 'absolute',
         left: offsetX,
@@ -63,14 +65,13 @@ const MapMarker = ({ cell, source, config, scale = 2 }: MapMarkerProps) => {
         width: imageSize,
         height: imageSize,
       }}
-      pointerEvents="none"
     >
       <Image
         source={source}
         style={{ width: imageSize, height: imageSize }}
         resizeMode="contain"
       />
-    </View>
+    </Pressable>
   );
 };
 

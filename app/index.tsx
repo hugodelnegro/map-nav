@@ -1,20 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import markers from '../data/makers';
 import InteractiveMap from './InteractiveMap';
 import MapGrid from './MapGrid';
-import MapMarker, { GridConfig } from './MapMarker';
-
-const MAP_IMAGE_WIDTH = 1254;
-const MAP_IMAGE_HEIGHT = 1254;
-
-export const GRID_CONFIG: GridConfig = {
-  gridSize: 60,
-  mapWidth: MAP_IMAGE_WIDTH,
-  mapHeight: MAP_IMAGE_HEIGHT,
-};
+import CampaignLayer from './CampaignLayer';
+import GridToggleButton from './GridToggleButton';
+import { MAP_IMAGE_WIDTH, MAP_IMAGE_HEIGHT, GRID_CONFIG } from '../utils/mapConfig';
 
 export default function MapScreen() {
   const { width, height } = useWindowDimensions();
@@ -38,35 +30,13 @@ export default function MapScreen() {
             mapWidth={MAP_IMAGE_WIDTH}
             mapHeight={MAP_IMAGE_HEIGHT}
           />
-
-          {markers.map((marker) => (
-            <MapMarker
-              key={marker.id}
-              cell={marker.cell}
-              source={marker.source}
-              config={GRID_CONFIG}
-              scale={marker.scale}
-            />
-          ))}
+          <CampaignLayer />
         </InteractiveMap>
 
-        <Pressable
-          onPress={() => setShowGrid((prev) => !prev)}
-          style={{
-            position: 'absolute',
-            right: 20,
-            top: 60,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            padding: 12,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#00FF00',
-          }}
-        >
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>
-            GRID: {showGrid ? 'ON' : 'OFF'}
-          </Text>
-        </Pressable>
+        <GridToggleButton
+          showGrid={showGrid}
+          onToggle={() => setShowGrid((prev) => !prev)}
+        />
       </View>
     </SafeAreaProvider>
   );
