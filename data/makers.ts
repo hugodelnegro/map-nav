@@ -3,6 +3,8 @@ import { CellCoord } from '../app/MapMarker';
 import { DIFFICULTY_TABLE, DifficultyEntry, getFormationById } from './formations';
 import { TeamId } from './teams';
 
+export type Stage = 'green' | 'ice' | 'lava';
+
 export interface MarkerData {
   id: string;
   cell: CellCoord;
@@ -10,6 +12,8 @@ export interface MarkerData {
   scale?: number;
   formationId: DifficultyEntry['id'];
   teamId: TeamId;
+  /** Terrain zone this marker sits on. */
+  stage: Stage;
   parentId?: string;
   childIds: string[];
 }
@@ -19,189 +23,196 @@ const castle = require('../assets/images/castle1.png');
 // =============================================================================
 // CAMPAIGN TREE — 30 markers, teams B / C / D only
 //
-// Team B is the hardest faction — their markers have a LOWER difficulty index
-// than the C/D sibling offered at the same fork. This means the player can
-// unlock B territory earlier/easier, but B itself is the tough enemy.
+// Formation index = BFS depth from root → every parent→child jump is exactly 1.
+// Sibling branches share the same depth and therefore the same formation tier,
+// giving the player equivalent difficulty regardless of which path they choose.
 //
-// At every fork with a B option:
-//   B child diff = C/D sibling diff − 2  (two formations easier = unlocked sooner)
-//
-// Opening: C4 → M12 → R8 → L16 → AA7 (linear tutorial d0–d4)
-// Then open world branches across C, D, and B territories.
+// Depth tiers:
+//   0        C4         (tutorial root)
+//   1        M12
+//   2        R8
+//   3        L16
+//   4        AA7        (open world begins — first fork)
+//   5        AP8, Y15
+//   6        AK12, BC11, AE18, O23
+//   7        AT18, AL26, BA21, AF24, Q23, V26
+//   8        BD31, AN37, AU41, AE36, T27, Z40
+//   9        BD41, AL41, AM55, AE58, L44, O55
+//   10       AO47
 // =============================================================================
 
 const markers: MarkerData[] = [
 
-  // ── Tutorial d0–d3 ─────────────────────────────────────────────────────────
+  // ── d0 ─────────────────────────────────────────────────────────────────────
   {
     id: 'C4',  cell: { col: 'C',  row: 4  }, source: castle,
-    formationId: 'king_alone_easy', teamId: 'C',
+    formationId: 'king_alone_easy', teamId: 'C', stage: 'green',
     childIds: ['M12'],
   },
+
+  // ── d1 ─────────────────────────────────────────────────────────────────────
   {
     id: 'M12', cell: { col: 'M',  row: 12 }, source: castle,
-    formationId: 'king_pawn_easy_a', teamId: 'D',
+    formationId: 'king_pawn_easy_a', teamId: 'D', stage: 'green',
     parentId: 'C4', childIds: ['R8'],
   },
+
+  // ── d2 ─────────────────────────────────────────────────────────────────────
   {
     id: 'R8',  cell: { col: 'R',  row: 8  }, source: castle,
-    formationId: 'king_pawn_easy_b', teamId: 'C',
+    formationId: 'king_pawn_easy_b', teamId: 'C', stage: 'green',
     parentId: 'M12', childIds: ['L16'],
   },
+
+  // ── d3 ─────────────────────────────────────────────────────────────────────
   {
     id: 'L16', cell: { col: 'L',  row: 16 }, source: castle,
-    formationId: 'king_pawn_easy_c', teamId: 'C',
+    formationId: 'king_pawn_easy_c', teamId: 'C', stage: 'green',
     parentId: 'R8', childIds: ['AA7'],
   },
 
-  // ── d4: first open-world fork — east(D) or south(C) ───────────────────────
+  // ── d4: first fork — east(D) or centre(C) ──────────────────────────────────
   {
     id: 'AA7',  cell: { col: 'AA', row: 7  }, source: castle,
-    formationId: 'king_two_pawns_a', teamId: 'C',
+    formationId: 'king_two_pawns_a', teamId: 'C', stage: 'green',
     parentId: 'L16', childIds: ['AP8', 'Y15'],
   },
 
-  // ── East branch — D then B ─────────────────────────────────────────────────
-  // AP8(D,d5) forks: AK12(D,d7) normal path, BC11(B,d5) B path (d7-2=5)
+  // ── d5 ─────────────────────────────────────────────────────────────────────
   {
     id: 'AP8',  cell: { col: 'AP', row: 8  }, source: castle,
-    formationId: 'king_two_pawns_b', teamId: 'D',
+    formationId: 'king_two_pawns_b', teamId: 'D', stage: 'green',
     parentId: 'AA7', childIds: ['AK12', 'BC11'],
   },
   {
-    id: 'AK12', cell: { col: 'AK', row: 12 }, source: castle,
-    formationId: 'king_bishop_b', teamId: 'D',
-    parentId: 'AP8', childIds: ['AT18', 'AL26'],
-  },
-  // BC11(B,d5) — 2 below AK12(d7)
-  {
-    id: 'BC11', cell: { col: 'BC', row: 11 }, source: castle,
-    formationId: 'king_two_pawns_b', teamId: 'B',
-    parentId: 'AP8', childIds: ['BA21'],
-  },
-  // AK12 forks: AL26(D,d9) normal, AT18(B,d7) = d9-2
-  {
-    id: 'AT18', cell: { col: 'AT', row: 18 }, source: castle,
-    formationId: 'king_bishop_b', teamId: 'B',
-    parentId: 'AK12', childIds: ['BD31'],
-  },
-  {
-    id: 'BA21', cell: { col: 'BA', row: 21 }, source: castle,
-    formationId: 'king_pawn_bishop_a', teamId: 'B',
-    parentId: 'BC11', childIds: ['AU41'],
-  },
-  {
-    id: 'AL26', cell: { col: 'AL', row: 26 }, source: castle,
-    formationId: 'king_pawn_bishop_b', teamId: 'D',
-    parentId: 'AK12', childIds: ['AN37'],
+    id: 'Y15',  cell: { col: 'Y',  row: 15 }, source: castle,
+    formationId: 'king_two_pawns_b', teamId: 'C', stage: 'ice',
+    parentId: 'AA7', childIds: ['AE18', 'O23'],
   },
 
-  // ── Centre-south branch — C then D ────────────────────────────────────────
-  // Y15(C,d6) forks: AE18(C,d8), O23(C,d10)
+  // ── d6 ─────────────────────────────────────────────────────────────────────
   {
-    id: 'Y15',  cell: { col: 'Y',  row: 15 }, source: castle,
-    formationId: 'king_bishop_a', teamId: 'C',
-    parentId: 'AA7', childIds: ['AE18', 'O23'],
+    id: 'AK12', cell: { col: 'AK', row: 12 }, source: castle,
+    formationId: 'king_bishop_a', teamId: 'D', stage: 'green',
+    parentId: 'AP8', childIds: ['AT18', 'AL26'],
+  },
+  {
+    id: 'BC11', cell: { col: 'BC', row: 11 }, source: castle,
+    formationId: 'king_bishop_a', teamId: 'B', stage: 'lava',
+    parentId: 'AP8', childIds: ['BA21'],
   },
   {
     id: 'AE18', cell: { col: 'AE', row: 18 }, source: castle,
-    formationId: 'king_pawn_bishop_a', teamId: 'C',
+    formationId: 'king_bishop_a', teamId: 'C', stage: 'ice',
     parentId: 'Y15', childIds: ['AF24'],
   },
   {
     id: 'O23',  cell: { col: 'O',  row: 23 }, source: castle,
-    formationId: 'king_two_bishops_a', teamId: 'C',
+    formationId: 'king_bishop_a', teamId: 'C', stage: 'green',
     parentId: 'Y15', childIds: ['Q23', 'V26'],
   },
-  // AF24(C,d11) forks: AE36(C,d13), AL26 already placed — just AE36
+
+  // ── d7 ─────────────────────────────────────────────────────────────────────
+  {
+    id: 'AT18', cell: { col: 'AT', row: 18 }, source: castle,
+    formationId: 'king_bishop_b', teamId: 'B', stage: 'lava',
+    parentId: 'AK12', childIds: ['BD31'],
+  },
+  {
+    id: 'AL26', cell: { col: 'AL', row: 26 }, source: castle,
+    formationId: 'king_bishop_b', teamId: 'D', stage: 'ice',
+    parentId: 'AK12', childIds: ['AN37'],
+  },
+  {
+    id: 'BA21', cell: { col: 'BA', row: 21 }, source: castle,
+    formationId: 'king_bishop_b', teamId: 'B', stage: 'lava',
+    parentId: 'BC11', childIds: ['AU41'],
+  },
   {
     id: 'AF24', cell: { col: 'AF', row: 24 }, source: castle,
-    formationId: 'king_two_bishops_b', teamId: 'C',
+    formationId: 'king_bishop_b', teamId: 'C', stage: 'ice',
     parentId: 'AE18', childIds: ['AE36'],
   },
   {
-    id: 'AN37', cell: { col: 'AN', row: 37 }, source: castle,
-    formationId: 'king_three_pawns_a', teamId: 'D',
-    parentId: 'AL26', childIds: ['AL41'],
-  },
-  {
     id: 'Q23',  cell: { col: 'Q',  row: 23 }, source: castle,
-    formationId: 'king_two_bishops_b', teamId: 'C',
+    formationId: 'king_bishop_b', teamId: 'C', stage: 'ice',
     parentId: 'O23', childIds: ['T27'],
   },
   {
     id: 'V26',  cell: { col: 'V',  row: 26 }, source: castle,
-    formationId: 'king_three_pawns_a', teamId: 'C',
+    formationId: 'king_bishop_b', teamId: 'C', stage: 'ice',
     parentId: 'O23', childIds: ['Z40'],
   },
-  {
-    id: 'T27',  cell: { col: 'T',  row: 27 }, source: castle,
-    formationId: 'king_three_pawns_b', teamId: 'C',
-    parentId: 'Q23', childIds: ['L44'],
-  },
 
-  // ── B deep chain — always 2 below D peers ──────────────────────────────────
-  // BD31(B,d8) — 2 below AL26(d9)+AT18 chain
+  // ── d8 ─────────────────────────────────────────────────────────────────────
   {
     id: 'BD31', cell: { col: 'BD', row: 31 }, source: castle,
-    formationId: 'king_pawn_bishop_a', teamId: 'B',
+    formationId: 'king_pawn_bishop_a', teamId: 'B', stage: 'lava',
     parentId: 'AT18', childIds: ['BD41'],
   },
   {
+    id: 'AN37', cell: { col: 'AN', row: 37 }, source: castle,
+    formationId: 'king_pawn_bishop_a', teamId: 'D', stage: 'lava',
+    parentId: 'AL26', childIds: ['AL41'],
+  },
+  {
     id: 'AU41', cell: { col: 'AU', row: 41 }, source: castle,
-    formationId: 'king_rook_a', teamId: 'B',
+    formationId: 'king_pawn_bishop_a', teamId: 'B', stage: 'lava',
     parentId: 'BA21', childIds: ['AM55'],
   },
   {
-    id: 'BD41', cell: { col: 'BD', row: 41 }, source: castle,
-    formationId: 'king_rook_b', teamId: 'B',
-    parentId: 'BD31', childIds: [],
-  },
-
-  // ── Centre-east deep ───────────────────────────────────────────────────────
-  {
     id: 'AE36', cell: { col: 'AE', row: 36 }, source: castle,
-    formationId: 'king_rook_a', teamId: 'C',
+    formationId: 'king_pawn_bishop_a', teamId: 'C', stage: 'ice',
     parentId: 'AF24', childIds: ['AE58'],
   },
   {
-    id: 'AL41', cell: { col: 'AL', row: 41 }, source: castle,
-    formationId: 'king_rook_bishop_a', teamId: 'D',
-    parentId: 'AN37', childIds: ['AO47'],
+    id: 'T27',  cell: { col: 'T',  row: 27 }, source: castle,
+    formationId: 'king_pawn_bishop_a', teamId: 'C', stage: 'ice',
+    parentId: 'Q23', childIds: ['L44'],
   },
   {
     id: 'Z40',  cell: { col: 'Z',  row: 40 }, source: castle,
-    formationId: 'king_rook_pawn_a', teamId: 'C',
+    formationId: 'king_pawn_bishop_a', teamId: 'C', stage: 'ice',
     parentId: 'V26', childIds: ['O55'],
   },
-  {
-    id: 'L44',  cell: { col: 'L',  row: 44 }, source: castle,
-    formationId: 'king_rook_pawn_b', teamId: 'C',
-    parentId: 'T27', childIds: [],
-  },
 
-  // ── Endgame ────────────────────────────────────────────────────────────────
+  // ── d9 ─────────────────────────────────────────────────────────────────────
   {
-    id: 'AO47', cell: { col: 'AO', row: 47 }, source: castle,
-    formationId: 'king_rook_bishop_b', teamId: 'D',
-    parentId: 'AL41', childIds: [],
+    id: 'BD41', cell: { col: 'BD', row: 41 }, source: castle,
+    formationId: 'king_pawn_bishop_b', teamId: 'B', stage: 'lava',
+    parentId: 'BD31', childIds: [],
   },
   {
-    id: 'O55',  cell: { col: 'O',  row: 55 }, source: castle,
-    formationId: 'king_two_rooks_a', teamId: 'C',
-    parentId: 'Z40', childIds: [],
+    id: 'AL41', cell: { col: 'AL', row: 41 }, source: castle,
+    formationId: 'king_pawn_bishop_b', teamId: 'D', stage: 'lava',
+    parentId: 'AN37', childIds: ['AO47'],
+  },
+  {
+    id: 'AM55', cell: { col: 'AM', row: 55 }, source: castle,
+    formationId: 'king_pawn_bishop_b', teamId: 'B', stage: 'green',
+    parentId: 'AU41', childIds: [],
   },
   {
     id: 'AE58', cell: { col: 'AE', row: 58 }, source: castle,
-    formationId: 'king_two_rooks_b', teamId: 'C',
+    formationId: 'king_pawn_bishop_b', teamId: 'C', stage: 'green',
     parentId: 'AE36', childIds: [],
   },
-  // AM55(B) — 2 below O55(king_two_rooks_a=20), so king_two_rooks_pawn_b... 
-  // Actually B endgame: AU41(king_rook_a=14) → AM55(king_rook_pawn_a=16) +2 steps in B chain
   {
-    id: 'AM55', cell: { col: 'AM', row: 55 }, source: castle,
-    formationId: 'king_two_rooks_a', teamId: 'B',
-    parentId: 'AU41', childIds: [],
+    id: 'L44',  cell: { col: 'L',  row: 44 }, source: castle,
+    formationId: 'king_pawn_bishop_b', teamId: 'C', stage: 'green',
+    parentId: 'T27', childIds: [],
+  },
+  {
+    id: 'O55',  cell: { col: 'O',  row: 55 }, source: castle,
+    formationId: 'king_pawn_bishop_b', teamId: 'C', stage: 'green',
+    parentId: 'Z40', childIds: [],
+  },
+
+  // ── d10 ────────────────────────────────────────────────────────────────────
+  {
+    id: 'AO47', cell: { col: 'AO', row: 47 }, source: castle,
+    formationId: 'king_two_bishops_a', teamId: 'D', stage: 'lava',
+    parentId: 'AL41', childIds: [],
   },
 ];
 

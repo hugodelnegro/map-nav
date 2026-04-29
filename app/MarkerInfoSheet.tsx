@@ -18,6 +18,12 @@ const PIECE_EMOJI: Record<string, string> = {
 const MAX_DOTS   = 5;
 const pieceLabel = (name: string) => `${PIECE_EMOJI[name] ?? '?'} ${name}`;
 
+const STAGE_LABEL: Record<string, { icon: string; color: string }> = {
+  green: { icon: '🌿', color: '#4caf50' },
+  ice:   { icon: '❄',  color: '#64b5f6' },
+  lava:  { icon: '🌋', color: '#ff7043' },
+};
+
 const Tab = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
   <Pressable onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
     <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
@@ -46,7 +52,9 @@ const MarkerInfoSheet = ({ marker, entry, onClose, onVictory }: Props) => {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.stageLabel}>Stage {marker.id}</Text>
+              <Text style={styles.stageLabel}>
+                {STAGE_LABEL[marker.stage]?.icon} Stage {marker.id} · {marker.stage}
+              </Text>
               <Text style={styles.formationName}>{entry.name}</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
