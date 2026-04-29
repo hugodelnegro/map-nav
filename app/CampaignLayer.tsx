@@ -5,7 +5,8 @@ import MarkerConnection from './MarkerConnection';
 import MarkerInfoSheet from './MarkerInfoSheet';
 import TeamFlag from './TeamFlag';
 import { GRID_CONFIG, cellCenter, cellToPixelRect } from '../utils/mapConfig';
-import { hasBeenPlayed, loadMarkerHistory } from '../utils/markerHistory';
+import MarkerStars from './MarkerStars';
+import { hasBeenPlayed, loadMarkerHistory, getMarkerStars } from '../utils/markerHistory';
 import { TeamId } from '../data/teams';
 
 /** All parent→child edges derived from the marker tree */
@@ -30,11 +31,16 @@ const CampaignLayer = () => {
   // flag updates are guaranteed to trigger a re-render.
   const [wonMarkerIds, setWonMarkerIds] = useState<ReadonlySet<string>>(new Set());
 
+  // Star ratings keyed by marker ID, derived from bestPerRound history.
+  const [markerStars, setMarkerStars] = useState<Record<string, 0 | 1 | 2 | 3>>({});
+
   // Hydrate from persisted history on mount.
   useEffect(() => {
     loadMarkerHistory().then(() => {
-      const won = new Set(markers.map(m => m.id).filter(hasBeenPlayed));
+      const won   = new Set(markers.map(m => m.id).filter(hasBeenPlayed));
+      const stars = Object.fromEntries(markers.map(m => [m.id, getMarkerStars(m.id)])) as Record<string, 0 | 1 | 2 | 3>;
       setWonMarkerIds(won);
+      setMarkerStars(stars);
     });
   }, []);
 
@@ -44,6 +50,7 @@ const CampaignLayer = () => {
 
   const handleVictory = (markerId: string) => {
     setWonMarkerIds(prev => new Set([...prev, markerId]));
+    setMarkerStars(prev => ({ ...prev, [markerId]: getMarkerStars(markerId) }));
   };
 
   const flagTeamFor = (marker: MarkerData): TeamId =>
@@ -51,13 +58,17 @@ const CampaignLayer = () => {
 
   return (
     <>
-      {connections.map(([parent, child]) => (
-        <MarkerConnection
-          key={`${parent.id}-${child.id}`}
-          from={cellCenter(parent.cell)}
-          to={cellCenter(child.cell)}
-        />
-      ))}
+      {connections.map(([parent, child]) => {
+        const unblocked = wonMarkerIds.has(parent.id) || wonMarkerIds.has(child.id) || child.teamId === 'A';
+        return (
+          <MarkerConnection
+            key={`${parent.id}-${child.id}`}
+            from={cellCenter(parent.cell)}
+            to={cellCenter(child.cell)}
+            unblocked={unblocked}
+          />
+        );
+      })}
 
       {markers.map((marker) => {
         const rect      = cellToPixelRect(marker.cell, GRID_CONFIG);
@@ -75,6 +86,12 @@ const CampaignLayer = () => {
             />
             <TeamFlag
               teamId={flagTeamFor(marker)}
+              centerX={rect.centerX}
+              centerY={rect.centerY}
+              markerSize={imageSize}
+            />
+            <MarkerStars
+              stars={markerStars[marker.id] ?? 0}
               centerX={rect.centerX}
               centerY={rect.centerY}
               markerSize={imageSize}

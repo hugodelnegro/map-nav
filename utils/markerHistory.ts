@@ -64,6 +64,27 @@ export function getBestForRound(markerId: string, roundIndex: number): RoundBest
   return store.get(markerId)?.bestPerRound[roundIndex];
 }
 
+/**
+ * Returns a star rating (0–3) for a marker based on the best recorded game.
+ *
+ * Rating is derived from total pieces lost across all rounds in bestPerRound:
+ *   0 played  → 0 stars
+ *   0 lost    → 3 stars (exceptional — flawless)
+ *   1–2 lost  → 2 stars (good)
+ *   3+ lost   → 1 star  (barely won)
+ */
+export function getMarkerStars(markerId: string): 0 | 1 | 2 | 3 {
+  const h = store.get(markerId);
+  if (!h || h.gamesPlayed === 0) return 0;
+
+  const totalLost = Object.values(h.bestPerRound)
+    .reduce((sum, round) => sum + round.piecesLost.length, 0);
+
+  if (totalLost === 0) return 3;
+  if (totalLost <= 2)  return 2;
+  return 1;
+}
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
 async function persist(): Promise<void> {
