@@ -7,6 +7,8 @@ import TeamFlag from './TeamFlag';
 import { GRID_CONFIG, cellCenter, cellToPixelRect } from '../utils/mapConfig';
 import MarkerStars from './MarkerStars';
 import { hasBeenPlayed, loadMarkerHistory, getMarkerStars } from '../utils/markerHistory';
+import MarkerLevel from './MarkerLevel';
+import { getFormationById, getFormationLevel } from '../data/formations';
 import { TeamId } from '../data/teams';
 
 /** All parent→child edges derived from the marker tree */
@@ -17,9 +19,17 @@ const connections: Array<[MarkerData, MarkerData]> = markers
   .map((m) => [markerById.get(m.parentId)!, m])
   .filter(([parent]) => Boolean(parent));
 
+/** Pre-computed integer level for each marker, derived from its formation. */
+const markerLevelMap = new Map<string, number>(
+  markers.map(m => {
+    const entry = getFormationById(m.formationId);
+    return [m.id, entry ? getFormationLevel(entry) : 0];
+  })
+);
+
 /**
- * Renders all campaign markers, connection lines, team flags, and the info
- * sheet on tap.
+ * Renders all campaign markers, connection lines, team flags, stars, levels,
+ * and the info sheet on tap.
  *
  * Flag logic: if the player has won a marker, its flag switches to Team A.
  * Otherwise it shows the marker's assigned team.
@@ -92,6 +102,12 @@ const CampaignLayer = () => {
             />
             <MarkerStars
               stars={markerStars[marker.id] ?? 0}
+              centerX={rect.centerX}
+              centerY={rect.centerY}
+              markerSize={imageSize}
+            />
+            <MarkerLevel
+              level={markerLevelMap.get(marker.id) ?? 0}
               centerX={rect.centerX}
               centerY={rect.centerY}
               markerSize={imageSize}

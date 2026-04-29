@@ -22,7 +22,7 @@ const MarkerStars = ({ stars, centerX, centerY, markerSize }: MarkerStarsProps) 
   if (stars === 0) return null;
 
   const left = centerX - ROW_WIDTH / 2;
-  const top  = centerY + markerSize / 2 -2;
+  const top  = centerY + markerSize / 2 + 6;
 
   return (
     <View pointerEvents="none" style={[styles.row, { left, top }]}>
