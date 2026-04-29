@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MarkerData } from '../data/makers';
-import { DIFFICULTY_TABLE, OppPiece } from '../data/formations';
+import { DifficultyEntry, OppPiece } from '../data/formations';
 import { getMarkerHistory, getBestForRound, hasBeenPlayed } from '../utils/markerHistory';
 import GameEmulator from './GameEmulator';
 
 interface Props {
   marker: MarkerData | null;
+  entry: DifficultyEntry | null;
   onClose: () => void;
+  onVictory?: () => void;
 }
 
 const PIECE_EMOJI: Record<string, string> = {
@@ -22,19 +24,18 @@ const Tab = ({ label, active, onPress }: { label: string; active: boolean; onPre
   </Pressable>
 );
 
-const MarkerInfoSheet = ({ marker, onClose }: Props) => {
+const MarkerInfoSheet = ({ marker, entry, onClose, onVictory }: Props) => {
   const [activeTab,    setActiveTab]    = useState<'formation' | 'history'>('formation');
   const [showEmulator, setShowEmulator] = useState(false);
 
-  if (!marker) return null;
+  if (!marker || !entry) return null;
 
-  const entry      = DIFFICULTY_TABLE.find(e => e.difficulty === marker.difficulty);
   const played     = hasBeenPlayed(marker.id);
   const history    = getMarkerHistory(marker.id);
-  const filledDots = Math.min(marker.difficulty + 1, MAX_DOTS);
+  const filledDots = Math.min(entry.difficulty + 1, MAX_DOTS);
 
   if (showEmulator) {
-    return <GameEmulator markerId={marker.id} onExit={() => setShowEmulator(false)} />;
+    return <GameEmulator markerId={marker.id} entry={entry} onExit={() => setShowEmulator(false)} onVictory={onVictory} />;
   }
 
   return (
@@ -46,7 +47,7 @@ const MarkerInfoSheet = ({ marker, onClose }: Props) => {
           <View style={styles.header}>
             <View>
               <Text style={styles.stageLabel}>Stage {marker.id}</Text>
-              <Text style={styles.formationName}>{entry?.name ?? '—'}</Text>
+              <Text style={styles.formationName}>{entry.name}</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
@@ -55,7 +56,7 @@ const MarkerInfoSheet = ({ marker, onClose }: Props) => {
 
           {/* Difficulty + games played */}
           <View style={styles.diffRow}>
-            <Text style={styles.diffNumber}>{marker.difficulty}</Text>
+            <Text style={styles.diffNumber}>{entry.difficulty}</Text>
             <View style={styles.dots}>
               {Array.from({ length: MAX_DOTS }, (_, i) => (
                 <View key={i} style={[styles.dot, i < filledDots ? styles.dotFilled : styles.dotEmpty]} />
@@ -81,7 +82,7 @@ const MarkerInfoSheet = ({ marker, onClose }: Props) => {
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false} nestedScrollEnabled>
 
             {/* Formation tab */}
-            {activeTab === 'formation' && entry && entry.variants.map((variant, i) => (
+            {activeTab === 'formation' && entry.variants.map((variant, i) => (
               <View key={i} style={styles.variantCard}>
                 <View style={styles.variantHeader}>
                   <Text style={styles.variantTitle}>Round {i + 1}</Text>
@@ -115,7 +116,7 @@ const MarkerInfoSheet = ({ marker, onClose }: Props) => {
                     <Text style={styles.gamesPlayedValue}>{history.gamesPlayed}</Text>
                   </View>
 
-                  {entry && entry.variants.map((_, i) => {
+                  {entry.variants.map((_, i) => {
                     const best = getBestForRound(marker.id, i);
                     return (
                       <View key={i} style={styles.roundBestCard}>

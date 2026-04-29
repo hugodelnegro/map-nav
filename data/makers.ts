@@ -1,6 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 import { CellCoord } from '../app/MapMarker';
-import { DIFFICULTY_TABLE, DifficultyEntry } from './formations';
+import { DIFFICULTY_TABLE, DifficultyEntry, getFormationById } from './formations';
+import { TeamId } from './teams';
 
 export interface MarkerData {
   id: string;
@@ -8,8 +9,11 @@ export interface MarkerData {
   source: ImageSourcePropType;
   scale?: number;
 
-  /** Difficulty index used to load the matching opponent formation. */
-  difficulty: DifficultyEntry['difficulty'];
+  /** Formation entry ID used to load the matching opponent formation. */
+  formationId: DifficultyEntry['id'];
+
+  /** Team this marker belongs to. */
+  teamId: TeamId;
 
   /** Parent marker in the campaign tree. Undefined means this is a root node. */
   parentId?: string;
@@ -25,14 +29,16 @@ const markers: MarkerData[] = [
     id: '1',
     cell: { col: 'C', row: 4 },
     source: castle,
-    difficulty: 0,
+    formationId: 'king_alone_easy',
+    teamId: 'D',
     childIds: ['2', '3'],
   },
   {
     id: '2',
     cell: { col: 'M', row: 12 },
     source: castle,
-    difficulty: 1,
+    formationId: 'king_pawn_easy_a',
+    teamId: 'B',
     parentId: '1',
     childIds: [],
   },
@@ -40,7 +46,8 @@ const markers: MarkerData[] = [
     id: '3',
     cell: { col: 'R', row: 8 },
     source: castle,
-    difficulty: 2,
+    formationId: 'king_pawn_easy_c',
+    teamId: 'C',
     parentId: '1',
     childIds: [],
   },
@@ -48,7 +55,8 @@ const markers: MarkerData[] = [
     id: '4',
     cell: { col: 'L', row: 16 },
     source: castle,
-    difficulty: 3,
+    formationId: 'king_two_pawns_a',
+    teamId: 'D',
     parentId: '2',
     childIds: [],
   },
@@ -59,11 +67,10 @@ const markerById = new Map(markers.map(marker => [marker.id, marker]));
 export const getMarkerById = (markerId: string): MarkerData | undefined =>
   markerById.get(markerId);
 
-export const getMarkerDifficultyEntry = (markerId: string): DifficultyEntry | undefined => {
+export const getMarkerFormationEntry = (markerId: string): DifficultyEntry | undefined => {
   const marker = getMarkerById(markerId);
   if (!marker) return undefined;
-
-  return DIFFICULTY_TABLE.find(entry => entry.difficulty === marker.difficulty);
+  return getFormationById(marker.formationId);
 };
 
 export const getMarkerChildren = (markerId: string): MarkerData[] => {
@@ -90,11 +97,11 @@ export const isMarkerUnlocked = (
 
 export const validateMarkerTree = (): string[] => {
   const errors: string[] = [];
-  const difficultyValues = new Set(DIFFICULTY_TABLE.map(entry => entry.difficulty));
+  const formationIds = new Set(DIFFICULTY_TABLE.map(entry => entry.id));
 
   for (const marker of markers) {
-    if (!difficultyValues.has(marker.difficulty)) {
-      errors.push(`Marker ${marker.id} uses missing difficulty ${marker.difficulty}.`);
+    if (!formationIds.has(marker.formationId)) {
+      errors.push(`Marker ${marker.id} references missing formationId '${marker.formationId}'.`);
     }
 
     if (marker.parentId && !markerById.has(marker.parentId)) {

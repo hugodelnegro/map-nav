@@ -19,17 +19,32 @@ const colLabelToIndex = (col: string): number => {
   return index - 1;
 };
 
+/** Returns the full pixel rect for a grid cell */
+export const cellToPixelRect = (
+  cell: CellCoord,
+  config: GridConfig = GRID_CONFIG,
+) => {
+  const cellWidth  = config.mapWidth  / config.gridSize;
+  const cellHeight = config.mapHeight / config.gridSize;
+  const colIdx     = colLabelToIndex(cell.col);
+  const rowIdx     = config.gridSize - cell.row;
+  const x          = colIdx * cellWidth;
+  const y          = rowIdx * cellHeight;
+  return {
+    x,
+    y,
+    width:   cellWidth,
+    height:  cellHeight,
+    centerX: x + cellWidth  / 2,
+    centerY: y + cellHeight / 2,
+  };
+};
+
 /** Returns the pixel center of a grid cell */
 export const cellCenter = (
   cell: CellCoord,
   config: GridConfig = GRID_CONFIG,
 ): { x: number; y: number } => {
-  const cellWidth = config.mapWidth / config.gridSize;
-  const cellHeight = config.mapHeight / config.gridSize;
-  const colIdx = colLabelToIndex(cell.col);
-  const rowIdx = config.gridSize - cell.row;
-  return {
-    x: colIdx * cellWidth + cellWidth / 2,
-    y: rowIdx * cellHeight + cellHeight / 2,
-  };
+  const { centerX, centerY } = cellToPixelRect(cell, config);
+  return { x: centerX, y: centerY };
 };

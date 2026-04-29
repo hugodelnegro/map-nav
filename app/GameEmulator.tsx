@@ -7,13 +7,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { DIFFICULTY_TABLE, OppPiece } from '../data/formations';
-import { getMarkerById } from '../data/makers';
+import { DifficultyEntry, OppPiece } from '../data/formations';
 import { RoundRecord, recordVictory } from '../utils/markerHistory';
 
 interface Props {
   markerId: string;
+  entry: DifficultyEntry;
   onExit: () => void;
+  /** Called after a victory is persisted so the parent can refresh flag state. */
+  onVictory?: () => void;
 }
 
 const PIECE_EMOJI: Record<string, string> = {
@@ -33,8 +35,6 @@ const GREEN_B = 'rgba(76,175,80,0.15)';
 const RED_B   = 'rgba(224,82,82,0.15)';
 
 const turnLabel = (i: number) => i % 2 === 0 ? 'Player first' : 'CPU first';
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 const SectionLabel = ({ text }: { text: string }) => (
   <Text style={styles.sectionLabel}>{text}</Text>
@@ -83,23 +83,18 @@ const RoundSummary = ({ round, roundNum, variantIndex, totalRounds }: {
   </View>
 );
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+const GameEmulator = ({ markerId, entry, onExit, onVictory }: Props) => {
+  const totalRounds = entry.variants.length;
+  const scrollRef   = useRef<ScrollView>(null);
 
-const GameEmulator = ({ markerId, onExit }: Props) => {
-  const marker = getMarkerById(markerId);
-  const entry  = marker ? DIFFICULTY_TABLE.find(e => e.difficulty === marker.difficulty) : undefined;
-  const totalRounds = entry?.variants.length ?? 0;
+  const [rounds, setRounds] = useState<RoundRecord[]>([]);
+  const [killed, setKilled] = useState<string[]>([]);
+  const [lost,   setLost]   = useState<string[]>([]);
+  const [done,   setDone]   = useState(false);
 
-  const scrollRef = useRef<ScrollView>(null);
-
-  const [rounds,  setRounds]  = useState<RoundRecord[]>([]);
-  const [killed,  setKilled]  = useState<string[]>([]);
-  const [lost,    setLost]    = useState<string[]>([]);
-  const [done,    setDone]    = useState(false);
-
-  const currentRoundIndex  = rounds.length;
-  const isLastRound        = currentRoundIndex === totalRounds - 1;
-  const variant: OppPiece[] = entry?.variants[currentRoundIndex] ?? [];
+  const currentRoundIndex = rounds.length;
+  const isLastRound       = currentRoundIndex === totalRounds - 1;
+  const variant: OppPiece[] = entry.variants[currentRoundIndex] ?? [];
   const kingSelected        = killed.includes('king');
 
   const toggleKill = (name: string) =>
@@ -119,10 +114,11 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
 
     if (nextRounds.length >= totalRounds) {
       await recordVictory(markerId, nextRounds);
+      onVictory?.();
       setDone(true);
       setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 60);
     }
-  }, [killed, lost, rounds, totalRounds, markerId]);
+  }, [killed, lost, rounds, totalRounds, markerId, onVictory]);
 
   const playAgain = () => {
     setRounds([]);
@@ -131,7 +127,7 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
     setDone(false);
   };
 
-  if (!marker || !entry || totalRounds === 0) {
+  if (totalRounds === 0) {
     return (
       <Modal transparent animationType="fade" visible onRequestClose={onExit}>
         <View style={styles.backdrop}>
@@ -148,7 +144,6 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
 
   const totalKilled = rounds.reduce((n, r) => n + r.piecesKilled.length, 0);
   const totalLost   = rounds.reduce((n, r) => n + r.piecesLost.length, 0);
-
   const headerLabel = done
     ? 'Game complete'
     : `Round ${currentRoundIndex + 1} of ${totalRounds} · ${turnLabel(currentRoundIndex)}`;
@@ -169,8 +164,6 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
           </View>
 
           <ScrollView ref={scrollRef} style={styles.body} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-
-            {/* Results */}
             {done && (
               <>
                 <View style={styles.statsRow}>
@@ -191,12 +184,10 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
               </>
             )}
 
-            {/* Committed rounds */}
             {rounds.map((r, i) => (
               <RoundSummary key={i} round={r} roundNum={i + 1} variantIndex={i} totalRounds={totalRounds} />
             ))}
 
-            {/* Between rounds banner */}
             {!done && rounds.length > 0 && (
               <View style={styles.nextRoundBanner}>
                 <Text style={styles.nextRoundText}>
@@ -205,7 +196,6 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
               </View>
             )}
 
-            {/* Current round input */}
             {!done && (
               <View style={styles.inputBlock}>
                 <SectionLabel text="Formation" />
@@ -256,7 +246,6 @@ const GameEmulator = ({ markerId, onExit }: Props) => {
                 </Pressable>
               </View>
             )}
-
           </ScrollView>
 
           {done && (
